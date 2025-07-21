@@ -24,6 +24,7 @@ interface PortfolioState {
   
   // Actions
   setStocks: (stocks: Stock[]) => void
+  updateStocks: (stocks: Stock[]) => void
   setSectors: (sectors: SectorSummary[]) => void
   setPortfolioSummary: (summary: PortfolioSummary) => void
   setLoading: (loading: boolean) => void
@@ -61,6 +62,16 @@ export const usePortfolioStore = create<PortfolioState>()(
       isConnected: false,
 
       setStocks: (stocks) => set({ stocks }),
+      
+      updateStocks: (stocks) => {
+        set({ 
+          stocks,
+          lastUpdated: new Date().toISOString()
+        })
+        const { clearCache } = get()
+        clearCache()
+      },
+      
       setSectors: (sectors) => set({ sectors }),
       setPortfolioSummary: (summary) => set({ portfolioSummary: summary }),
       setLoading: (loading) => set({ isLoading: loading }),
@@ -150,7 +161,6 @@ export const usePortfolioStore = create<PortfolioState>()(
         cache.clear()
       },
       
-      // WebSocket methods
       connectWebSocket: () => {
         try {
           const ws = new WebSocket(WS_URL)
