@@ -1,13 +1,11 @@
 "use client"
 
-import React, { useCallback, useRef } from "react"
-import { RefreshCw, Settings, Download, Upload, Database, Globe } from "lucide-react"
+import { RefreshCw, Wifi, WifiOff, Clock, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { usePortfolioStore } from "@/store/portfolioStore"
-import { Stock } from "@/types/portfolio"
 
 export function DashboardHeader() {
   const { 
@@ -17,205 +15,13 @@ export function DashboardHeader() {
     isAutoRefresh, 
     toggleAutoRefresh,
     error,
-    stocks,
-    updateStocks
+    dataSource 
   } = usePortfolioStore()
 
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [dataSource, setDataSource] = React.useState<string>('simulated')
-
-  React.useEffect(() => {
-    const checkDataSource = async () => {
-      try {
-        const response = await fetch('/api/portfolio')
-        const data = await response.json()
-        if (data.metadata) {
-          setDataSource(data.metadata.dataSource)
-        }
-      } catch (error) {
-        console.error('Failed to check data source:', error)
-      }
-    }
-    checkDataSource()
-  }, [])
-
-  const handleRefresh = () => {
-    refreshPortfolio()
+  
+  const handleManualRefresh = () => {
+    refreshPortfolio(true) // Passing true to force refresh
   }
-
-  const exportToCSV = useCallback(() => {
-    const headers = [
-      'id',
-      'particulars',
-      'purchasePrice',
-      'qty',
-      'investment',
-      'portfolioPercentage',
-      'nseCode',
-      'cmp',
-      'presentValue',
-      'gainLoss',
-      'gainLossPercentage',
-      'marketCap',
-      'peRatio',
-      'latestEarnings',
-      'sector',
-      'revenue',
-      'ebitda',
-      'ebitdaPercentage',
-      'pat',
-      'patPercentage',
-      'debtToEquity',
-      'bookValue',
-      'stage2',
-      'salePrice'
-    ].join(',')
-    
-    const rows = stocks.map(stock => [
-      stock.id,
-      `"${stock.particulars}"`,
-      stock.purchasePrice,
-      stock.qty,
-      stock.investment,
-      stock.portfolioPercentage,
-      `"${stock.nseCode}"`,
-      stock.cmp,
-      stock.presentValue,
-      stock.gainLoss,
-      stock.gainLossPercentage,
-      stock.marketCap,
-      stock.peRatio,
-      stock.latestEarnings,
-      `"${stock.sector}"`,
-      stock.revenue,
-      stock.ebitda,
-      stock.ebitdaPercentage,
-      stock.pat,
-      stock.patPercentage,
-      stock.debtToEquity,
-      stock.bookValue,
-      `"${stock.stage2}"`,
-      stock.salePrice || ''
-    ].join(',')).join('\n')
-    
-    const csv = `${headers}\n${rows}`
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `portfolio-export-${new Date().toISOString().split('T')[0]}.csv`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
-  }, [stocks])
-
-  const handleImport = () => {
-    fileInputRef.current?.click()
-  }
-
-  const parseCSV = (text: string): Stock[] => {
-    const lines = text.split('\n')
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
-    const parsedStocks: Stock[] = []
-
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (!line) continue
-
-      const values: string[] = []
-      let current = ''
-      let inQuotes = false
-
-      for (let j = 0; j < line.length; j++) {
-        const char = line[j]
-        if (char === '"') {
-          inQuotes = !inQuotes
-        } else if (char === ',' && !inQuotes) {
-          values.push(current.trim())
-          current = ''
-        } else {
-          current += char
-        }
-      }
-      values.push(current.trim())
-
-      if (values.length !== headers.length) continue
-
-      try {
-        const stockData: any = {}
-        headers.forEach((header, index) => {
-          const value = values[index].replace(/"/g, '')
-          
-          if (['id', 'qty'].includes(header)) {
-            stockData[header] = parseInt(value) || 0
-          } else if ([
-            'purchasePrice', 'investment', 'portfolioPercentage', 'cmp', 
-            'presentValue', 'gainLoss', 'gainLossPercentage', 'marketCap', 
-            'peRatio', 'latestEarnings', 'revenue', 'ebitda', 'ebitdaPercentage', 
-            'pat', 'patPercentage', 'debtToEquity', 'bookValue', 'salePrice'
-          ].includes(header)) {
-            stockData[header] = parseFloat(value) || 0
-          } else {
-            stockData[header] = value || ''
-          }
-        })
-
-        if (stockData.particulars && stockData.nseCode) {
-          parsedStocks.push(stockData as Stock)
-        }
-      } catch (error) {
-        console.error(`Error parsing row ${i}:`, error)
-      }
-    }
-
-    return parsedStocks
-  }
-
-  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
-      alert('Please select a valid CSV file')
-      return
-    }
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const text = e.target?.result as string
-        const importedStocks = parseCSV(text)
-        
-        if (importedStocks.length === 0) {
-          alert('No valid stock data found in the CSV file')
-          return
-        }
-
-        const confirmed = confirm(
-          `Found ${importedStocks.length} stocks in the CSV file. This will replace your current portfolio. Are you sure you want to continue?`
-        )
-        
-        if (confirmed) {
-          updateStocks(importedStocks)
-          alert(`Successfully imported ${importedStocks.length} stocks`)
-        }
-      } catch (error) {
-        console.error('Error importing CSV:', error)
-        alert('Error importing CSV file. Please check the file format.')
-      }
-    }
-    
-    reader.onerror = () => {
-      alert('Error reading the file')
-    }
-    
-    reader.readAsText(file)
-    
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-  }, [updateStocks])
 
   const formatTimeAgo = (timestamp: string) => {
     const now = new Date()
@@ -231,18 +37,39 @@ export function DashboardHeader() {
   }
 
   const getDataSourceBadge = () => {
-    if (dataSource === 'real-api') {
+    if (dataSource === 'yahoo-finance-real') {
       return (
-        <Badge variant="success" className="hidden sm:flex">
-          <Globe className="h-3 w-3 mr-1" />
-          Live Data
+        <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-white">
+          <CheckCircle className="h-3 w-3 mr-1" />
+          Live Data (Yahoo Finance)
+        </Badge>
+      )
+    } else if (dataSource === 'yahoo-finance-mixed') {
+      return (
+        <Badge variant="secondary" className="bg-yellow-500 hover:bg-yellow-600 text-white">
+          <Clock className="h-3 w-3 mr-1" />
+          Mixed Data (Yahoo + Simulated)
+        </Badge>
+      )
+    } else if (dataSource === 'simulated-fallback') {
+      return (
+        <Badge variant="destructive">
+          <WifiOff className="h-3 w-3 mr-1" />
+          Demo Data (API Fallback)
+        </Badge>
+      )
+    } else if (dataSource === 'simulated') {
+      return (
+        <Badge variant="outline">
+          <WifiOff className="h-3 w-3 mr-1" />
+          Demo Data
         </Badge>
       )
     } else {
       return (
-        <Badge variant="secondary" className="hidden sm:flex">
-          <Database className="h-3 w-3 mr-1" />
-          Simulated
+        <Badge variant="outline">
+          <Clock className="h-3 w-3 mr-1" />
+          Loading...
         </Badge>
       )
     }
@@ -253,8 +80,14 @@ export function DashboardHeader() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           <div className="flex items-center space-x-4">
-            <h1 className="text-2xl font-bold text-gradient">Portfolio Dashboard</h1>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              Portfolio Dashboard
+            </h1>
+
+            {/*debugging batch
             {getDataSourceBadge()}
+            */}
+
             {lastUpdated && (
               <Badge variant="outline" className="hidden sm:flex">
                 Last updated: {formatTimeAgo(lastUpdated)}
@@ -262,7 +95,7 @@ export function DashboardHeader() {
             )}
             {error && (
               <Badge variant="destructive" className="hidden sm:flex">
-                Error: {error}
+                Error: {error.substring(0, 30)}...
               </Badge>
             )}
           </div>
@@ -279,49 +112,12 @@ export function DashboardHeader() {
             <Button
               variant="outline"
               size="sm"
-              onClick={handleRefresh}
+              onClick={handleManualRefresh}
               disabled={isLoading}
               className="hidden sm:flex"
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={exportToCSV}
-              className="hidden md:flex"
-              disabled={stocks.length === 0}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleImport}
-              className="hidden md:flex"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Import
-            </Button>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              onChange={handleFileUpload}
-              style={{ display: 'none' }}
-            />
-
-            <Button
-              variant="ghost"
-              size="icon"
-              className="hidden sm:flex"
-            >
-              <Settings className="h-4 w-4" />
+              {isLoading ? 'Refreshing...' : 'Refresh'}
             </Button>
 
             <ThemeToggle />
@@ -329,7 +125,7 @@ export function DashboardHeader() {
             <Button
               variant="outline"
               size="sm"
-              onClick={handleRefresh}
+              onClick={handleManualRefresh}
               disabled={isLoading}
               className="sm:hidden"
             >
@@ -347,14 +143,7 @@ export function DashboardHeader() {
                 onCheckedChange={toggleAutoRefresh}
               />
             </div>
-            <div className="flex items-center gap-2">
-              {getDataSourceBadge()}
-              {lastUpdated && (
-                <Badge variant="outline" className="text-xs">
-                  {formatTimeAgo(lastUpdated)}
-                </Badge>
-              )}
-            </div>
+            {getDataSourceBadge()}
           </div>
         </div>
       </div>

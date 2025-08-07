@@ -2,12 +2,12 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { TrendingUp, TrendingDown, DollarSign, Target } from "lucide-react"
+import { TrendingUp, TrendingDown, DollarSign, Target, Activity, Wifi, WifiOff } from "lucide-react"
 import { formatCurrency, formatPercentage, getGainLossColor } from "@/lib/utils"
 import { usePortfolioStore } from "@/store/portfolioStore"
 
 export function PortfolioSummary() {
-  const { portfolioSummary, isLoading } = usePortfolioStore()
+  const { portfolioSummary, isLoading, error, dataSource } = usePortfolioStore()
 
   if (isLoading || !portfolioSummary) {
     return (
@@ -26,6 +26,8 @@ export function PortfolioSummary() {
       </div>
     )
   }
+
+  const showDataWarning = dataSource.includes('simulated') || dataSource.includes('fallback')
 
   const {
     totalInvestment,
@@ -72,25 +74,69 @@ export function PortfolioSummary() {
   ]
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-      {cards.map((card, index) => (
-        <Card key={index} className={`transition-all duration-300 hover:shadow-lg ${card.className}`}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-            <CardTitle className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              {card.title}
-            </CardTitle>
-            <card.icon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold mb-1 ${card.valueColor || 'text-gray-900 dark:text-gray-100'}`}>
-              {card.value}
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              {card.description}
-            </p>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+    <>
+      {showDataWarning && (
+        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg dark:bg-yellow-950 dark:border-yellow-800">
+          <div className="flex items-center text-yellow-800 dark:text-yellow-200">
+            <WifiOff className="h-4 w-4 mr-2" />
+            <span className="text-sm">
+              {dataSource.includes('fallback') 
+                ? "Currently showing demo data due to API connectivity issues. Real-time data will resume automatically."
+                : "Portfolio showing demo data. Enable real-time updates to see live market prices."
+              }
+            </span>
+          </div>
+        </div>
+      )}
+
+      {dataSource === 'yahoo-finance-real' && (
+        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg dark:bg-green-950 dark:border-green-800">
+          <div className="flex items-center text-green-800 dark:text-green-200">
+            <Activity className="h-4 w-4 mr-2" />
+            <span className="text-sm">
+              Portfolio displaying live stock prices. Automatically updates every 5 minutes.
+            </span>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {cards.map((card, index) => (
+          <Card key={index} className={`transition-all duration-300 hover:shadow-lg ${card.className}`}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+              <CardTitle className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {card.title}
+              </CardTitle>
+              <card.icon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+            </CardHeader>
+            <CardContent>
+              <div className={`text-2xl font-bold mb-1 ${card.valueColor || 'text-gray-900 dark:text-gray-100'}`}>
+                {card.value}
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {card.description}
+              </p>
+              
+              {(card.title === "Current Value" || card.title === "Total Gain/Loss") && (
+                <div className="mt-2">
+                  <Badge variant="outline" className="text-xs">
+                    {dataSource === 'yahoo-finance-real' ? '🟢 Live' : 
+                     dataSource.includes('yahoo') ? '🟡 Mixed' : '🔴 Demo'}
+                  </Badge>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg dark:bg-red-950 dark:border-red-800">
+          <div className="text-red-800 dark:text-red-200 text-sm">
+            ❌ {error}
+          </div>
+        </div>
+      )}
+    </>
   )
 }

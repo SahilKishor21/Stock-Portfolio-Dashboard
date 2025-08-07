@@ -19,13 +19,13 @@ import {
   ChevronDown, 
   MoreHorizontal, 
   Eye, 
-  EyeOff,
   Search,
   X,
   TrendingUp,
   TrendingDown,
-  Filter,
-  Download
+  Download,
+  Wifi,
+  WifiOff
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -77,7 +77,11 @@ const SectorCell = memo(({ row }: { row: any }) => (
     className={cn(
       "font-normal text-xs",
       row.getValue("sector") === "Financial Sector" && "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-      row.getValue("sector") === "Tech Sector" && "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+      row.getValue("sector") === "Tech Sector" && "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+      row.getValue("sector") === "Consumer Goods" && "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+      row.getValue("sector") === "Industrial" && "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+      row.getValue("sector") === "Healthcare" && "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+      row.getValue("sector") === "Auto" && "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
     )}
   >
     {row.getValue("sector")}
@@ -361,7 +365,7 @@ const createColumns = (): ColumnDef<Stock>[] => [
 ]
 
 export const PortfolioTable = memo(() => {
-  const { stocks, selectedSector, isLoading, error } = usePortfolioStore()
+  const { stocks, selectedSector, isLoading, error, dataSource } = usePortfolioStore()
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
@@ -369,7 +373,6 @@ export const PortfolioTable = memo(() => {
   const [globalFilter, setGlobalFilter] = useState("")
   const [sectorFilter, setSectorFilter] = useState<string>("all")
 
-  // Memoized filtered stocks
   const filteredStocks = useMemo(() => {
     let result = stocks
     
@@ -383,7 +386,6 @@ export const PortfolioTable = memo(() => {
     
     return result
   }, [stocks, selectedSector, sectorFilter])
-
 
   const columns = useMemo(() => createColumns(), [])
 
@@ -417,7 +419,7 @@ export const PortfolioTable = memo(() => {
     },
     initialState: {
       pagination: {
-        pageSize: 15,
+        pageSize: 20,
       },
       columnVisibility: {
         marketCap: false,
@@ -426,7 +428,6 @@ export const PortfolioTable = memo(() => {
     },
   })
 
-  // Export functionality
   const exportToCSV = useCallback(() => {
     const headers = table.getVisibleFlatColumns()
       .filter(col => col.id !== 'actions')
@@ -502,10 +503,11 @@ export const PortfolioTable = memo(() => {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Portfolio Holdings</h2>
+          <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            Portfolio Holdings
+          </h2>
           <p className="text-muted-foreground">
             {table.getFilteredRowModel().rows.length} of {filteredStocks.length} stocks
             {selectedSector && (
@@ -553,7 +555,6 @@ export const PortfolioTable = memo(() => {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -597,7 +598,6 @@ export const PortfolioTable = memo(() => {
         )}
       </div>
 
-      {/* Table */}
       <div className="rounded-md border bg-card overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
@@ -662,7 +662,6 @@ export const PortfolioTable = memo(() => {
         </div>
       </div>
 
-      {/* Pagination */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4">
         <div className="flex-1 text-sm text-muted-foreground">
           {table.getFilteredSelectedRowModel().rows.length} of{" "}
@@ -680,7 +679,7 @@ export const PortfolioTable = memo(() => {
               <SelectValue placeholder={table.getState().pagination.pageSize} />
             </SelectTrigger>
             <SelectContent side="top">
-              {[10, 20, 30, 40, 50].map((pageSize) => (
+              {[5, 10, 20, 30, 40, 50].map((pageSize) => (
                 <SelectItem key={pageSize} value={`${pageSize}`}>
                   {pageSize}
                 </SelectItem>

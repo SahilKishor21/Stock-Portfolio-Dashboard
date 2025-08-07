@@ -2,12 +2,6 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { Stock, SectorSummary, PortfolioSummary } from '@/types/portfolio'
 
-interface CacheEntry<T> {
-  data: T
-  timestamp: number
-  ttl: number
-}
-
 interface PortfolioState {
   stocks: Stock[]
   sectors: SectorSummary[]
@@ -18,32 +12,41 @@ interface PortfolioState {
   refreshInterval: number
   isAutoRefresh: boolean
   selectedSector: string | null
-  cache: Map<string, CacheEntry<any>>
-  wsConnection: WebSocket | null
-  isConnected: boolean
+  dataSource: string
   
-  // Actions
   setStocks: (stocks: Stock[]) => void
-  updateStocks: (stocks: Stock[]) => void
   setSectors: (sectors: SectorSummary[]) => void
   setPortfolioSummary: (summary: PortfolioSummary) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   setLastUpdated: (timestamp: string) => void
+  setDataSource: (source: string) => void
   updateStock: (stockId: number, updatedData: Partial<Stock>) => void
-  refreshPortfolio: () => void
+  refreshPortfolio: (force?: boolean) => void
   setRefreshInterval: (interval: number) => void
   toggleAutoRefresh: () => void
   setSelectedSector: (sector: string | null) => void
-  getFromCache: <T>(key: string) => T | null
-  setCache: <T>(key: string, data: T, ttl?: number) => void
-  clearCache: () => void
-  connectWebSocket: () => void
-  disconnectWebSocket: () => void
 }
 
-const CACHE_TTL = 30000 
-const WS_URL = 'ws://localhost:3001' 
+const shouldRefresh = (lastUpdated: string | null, dataSource: string): boolean => {
+  if (!lastUpdated) return true
+  
+  const now = Date.now()
+  const lastUpdate = new Date(lastUpdated).getTime()
+  const timeDiff = now - lastUpdate
+  
+  let refreshThreshold: number
+  
+  if (dataSource.includes('yahoo-finance-real')) {
+    refreshThreshold = 5 * 60 * 1000 // 5 minutes for real data
+  } else if (dataSource.includes('mixed') || dataSource.includes('yahoo')) {
+    refreshThreshold = 3 * 60 * 1000 // 3 minutes for mixed data
+  } else {
+    refreshThreshold = 10 * 60 * 1000 // 10 minutes for simulated data
+  }
+  
+  return timeDiff > refreshThreshold
+}
 
 export const usePortfolioStore = create<PortfolioState>()(
   persist(
@@ -54,29 +57,35 @@ export const usePortfolioStore = create<PortfolioState>()(
       isLoading: false,
       error: null,
       lastUpdated: null,
-      refreshInterval: 15000,
+      refreshInterval: 300000, // 5 minutes default
       isAutoRefresh: true,
       selectedSector: null,
-      cache: new Map(),
-      wsConnection: null,
-      isConnected: false,
+      dataSource: 'unknown',
 
       setStocks: (stocks) => set({ stocks }),
-      
-      updateStocks: (stocks) => {
-        set({ 
-          stocks,
-          lastUpdated: new Date().toISOString()
-        })
-        const { clearCache } = get()
-        clearCache()
-      },
-      
       setSectors: (sectors) => set({ sectors }),
       setPortfolioSummary: (summary) => set({ portfolioSummary: summary }),
       setLoading: (loading) => set({ isLoading: loading }),
       setError: (error) => set({ error }),
       setLastUpdated: (timestamp) => set({ lastUpdated: timestamp }),
+      setDataSource: (source) => {
+        const currentSource = get().dataSource
+        if (source !== currentSource) {
+          let newInterval = get().refreshInterval
+          if (source.includes('yahoo-finance-real')) {
+            newInterval = 300000 // 5 minutes for real data
+          } else if (source.includes('mixed') || source.includes('yahoo')) {
+            newInterval = 180000 // 3 minutes for mixed data
+          } else {
+            newInterval = 600000 // 10 minutes for simulated data
+          }
+          
+          set({ 
+            dataSource: source,
+            refreshInterval: newInterval
+          })
+        }
+      },
       
       updateStock: (stockId, updatedData) => {
         const { stocks } = get()
@@ -86,123 +95,69 @@ export const usePortfolioStore = create<PortfolioState>()(
         set({ stocks: updatedStocks })
       },
       
-      refreshPortfolio: async () => {
-        const { getFromCache, setCache } = get()
-        const cachedData = getFromCache<any>('portfolio_data')
-        if (cachedData) {
-          console.log('Using cached portfolio data')
-          set({
-            stocks: cachedData.stocks,
-            sectors: cachedData.sectors,
-            portfolioSummary: cachedData.summary,
-            lastUpdated: cachedData.timestamp,
-          })
+      refreshPortfolio: async (force = false) => {
+        const { isLoading, lastUpdated, dataSource } = get()
+        
+        if (isLoading) {
+          return
+        }
+        
+        // Allow manual refresh to bypass time check
+        if (!force && !shouldRefresh(lastUpdated, dataSource)) {
           return
         }
         
         set({ isLoading: true, error: null })
+        
         try {
-          const response = await fetch('/api/portfolio')
-          if (!response.ok) throw new Error('Failed to fetch portfolio')
+          const response = await fetch('/api/portfolio', {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache'
+            },
+          })
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+          }
           
           const data = await response.json()
-
-          setCache('portfolio_data', {
-            stocks: data.data.stocks,
-            sectors: data.data.sectors,
-            summary: data.data.summary,
-            timestamp: new Date().toISOString(),
-          })
+          
+          if (data.success) {
+            set({
+              stocks: data.data.stocks,
+              sectors: data.data.sectors,
+              portfolioSummary: data.data.summary,
+              lastUpdated: new Date().toISOString(),
+              dataSource: data.metadata?.dataSource || 'unknown',
+              isLoading: false,
+              error: null,
+            })
+          } else {
+            throw new Error(data.error || 'API returned unsuccessful response')
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
           
           set({
-            stocks: data.data.stocks,
-            sectors: data.data.sectors,
-            portfolioSummary: data.data.summary,
-            lastUpdated: new Date().toISOString(),
-            isLoading: false,
-          })
-        } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: errorMessage,
             isLoading: false,
           })
         }
       },
       
-      setRefreshInterval: (interval) => set({ refreshInterval: interval }),
-      toggleAutoRefresh: () => set((state) => ({ isAutoRefresh: !state.isAutoRefresh })),
-      setSelectedSector: (sector) => set({ selectedSector: sector }),
-
-      getFromCache: <T>(key: string): T | null => {
-        const { cache } = get()
-        const entry = cache.get(key)
-        if (!entry) return null
-        
-        const now = Date.now()
-        if (now > entry.timestamp + entry.ttl) {
-          cache.delete(key)
-          return null
-        }
-        
-        return entry.data as T
+      setRefreshInterval: (interval) => {
+        set({ refreshInterval: interval })
       },
       
-      setCache: <T>(key: string, data: T, ttl = CACHE_TTL) => {
-        const { cache } = get()
-        cache.set(key, {
-          data,
-          timestamp: Date.now(),
-          ttl,
-        })
+      toggleAutoRefresh: () => {
+        const { isAutoRefresh } = get()
+        set({ isAutoRefresh: !isAutoRefresh })
       },
       
-      clearCache: () => {
-        const { cache } = get()
-        cache.clear()
-      },
-      
-      connectWebSocket: () => {
-        try {
-          const ws = new WebSocket(WS_URL)
-          
-          ws.onopen = () => {
-            console.log('WebSocket connected')
-            set({ wsConnection: ws, isConnected: true })
-          }
-          
-          ws.onmessage = (event) => {
-            try {
-              const data = JSON.parse(event.data)
-              if (data.type === 'STOCK_UPDATE') {
-                const { updateStock } = get()
-                updateStock(data.stockId, data.data)
-              }
-            } catch (error) {
-              console.error('WebSocket message error:', error)
-            }
-          }
-          
-          ws.onclose = () => {
-            console.log('WebSocket disconnected')
-            set({ wsConnection: null, isConnected: false })
-          }
-          
-          ws.onerror = (error) => {
-            console.error('WebSocket error:', error)
-            set({ error: 'WebSocket connection failed' })
-          }
-          
-        } catch (error) {
-          console.error('Failed to connect WebSocket:', error)
-        }
-      },
-      
-      disconnectWebSocket: () => {
-        const { wsConnection } = get()
-        if (wsConnection) {
-          wsConnection.close()
-          set({ wsConnection: null, isConnected: false })
-        }
+      setSelectedSector: (sector) => {
+        set({ selectedSector: sector })
       },
     }),
     {
