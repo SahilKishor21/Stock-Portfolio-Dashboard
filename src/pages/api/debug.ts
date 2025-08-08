@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    // Test external API call
+    //  external API call
     const testResponse = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/HDFCBANK.NS', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; Portfolio-Dashboard/1.0)'
