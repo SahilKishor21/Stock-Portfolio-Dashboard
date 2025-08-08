@@ -131,10 +131,9 @@ export function SectorOverview() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
                   dataKey="sector" 
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
+                  height={60}
                   interval={0}
+                  fontSize={12}
                 />
                 <YAxis width={80} />
                 <Tooltip 
