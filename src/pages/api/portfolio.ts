@@ -12,25 +12,29 @@ interface StockPriceUpdate {
   earnings?: number;
 }
 
+// Environment debugging
 const USE_REAL_API = process.env.USE_REAL_API !== 'false';
-const USE_YAHOO_FINANCE = true;
+const NODE_ENV = process.env.NODE_ENV;
+const IS_PRODUCTION = NODE_ENV === 'production';
 
-console.log('API Configuration:', {
+// Log environment for debugging
+console.log('🔧 API Environment Configuration:', {
   USE_REAL_API,
-  USE_YAHOO_FINANCE,
-  DATA_SOURCE: USE_REAL_API ? 'Yahoo Finance + Google Finance' : 'Simulated'
+  NODE_ENV,
+  IS_PRODUCTION,
+  timestamp: new Date().toISOString(),
+  userAgent: 'Portfolio Dashboard API'
 });
 
 let lastApiCall = 0;
 const API_CALL_INTERVAL = 1000;
 
 const fetchRealMarketData = async (): Promise<StockPriceUpdate[]> => {
-  if (!USE_YAHOO_FINANCE) {
-    console.log('🎭 Yahoo Finance disabled, using simulated data...');
-    return [];
-  }
-
+  console.log('🌐 Starting real market data fetch...');
+  console.log('📡 Environment:', { NODE_ENV, IS_PRODUCTION });
+  
   try {
+    // Rate limiting
     const now = Date.now();
     const timeSinceLastCall = now - lastApiCall;
     if (timeSinceLastCall < API_CALL_INTERVAL) {
@@ -39,11 +43,50 @@ const fetchRealMarketData = async (): Promise<StockPriceUpdate[]> => {
     lastApiCall = Date.now();
 
     const stockSymbols = mockStocks.map(stock => stock.nseCode);
-    console.log(`📈 Fetching real data for: ${stockSymbols.join(', ')}`);
+    console.log(`📈 Attempting to fetch data for ${stockSymbols.length} stocks:`, stockSymbols.slice(0, 5));
+    
+    // Test single stock first to debug
+    console.log('🧪 Testing single stock fetch first...');
+    const testStock = stockSymbols[0]; // HDFCBANK
+    const testUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${testStock}.NS`;
+    
+    console.log('🔗 Test URL:', testUrl);
+    
+    const testResponse = await fetch(testUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; Portfolio-Dashboard/1.0)',
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache'
+      },
+      // Add timeout for production
+      signal: AbortSignal.timeout(10000) // 10 second timeout
+    });
+    
+    console.log('📊 Test response status:', testResponse.status);
+    console.log('📊 Test response ok:', testResponse.ok);
+    
+    if (!testResponse.ok) {
+      throw new Error(`Test fetch failed: ${testResponse.status} ${testResponse.statusText}`);
+    }
+    
+    const testData = await testResponse.json();
+    console.log('✅ Test fetch successful, proceeding with full fetch...');
+    
+    // If test successful, proceed with full fetch
     const updates = await fetchRealMarketDataYahoo(stockSymbols);
+    console.log(`📊 Fetch completed: ${updates.length} successful out of ${stockSymbols.length}`);
+    
     return updates;
+    
   } catch (error) {
     console.error('❌ Real market data fetch failed:', error);
+    console.error('❌ Error details:', {
+      message: typeof error === 'object' && error !== null && 'message' in error ? (error as any).message : String(error),
+      name: typeof error === 'object' && error !== null && 'name' in error ? (error as any).name : 'UnknownError',
+      stack: typeof error === 'object' && error !== null && 'stack' in error ? (error as any).stack?.substring(0, 200) : undefined
+    });
+    
+    // Return empty array to trigger fallback
     return [];
   }
 };
@@ -51,13 +94,16 @@ const fetchRealMarketData = async (): Promise<StockPriceUpdate[]> => {
 const simulateMarketData = (): StockPriceUpdate[] => {
   console.log('🎯 Using simulated market data...');
   const updates: StockPriceUpdate[] = [];
+  
   mockStocks.forEach(stock => {
     const baseVolatility = 0.02;
     const trendFactor = (Math.random() - 0.5) * 0.008;
     const randomFactor = (Math.random() - 0.5) * baseVolatility;
     const changePercent = trendFactor + randomFactor;
+    
     const newPrice = stock.cmp * (1 + changePercent);
     const change = newPrice - stock.cmp;
+    
     updates.push({
       symbol: stock.nseCode,
       price: newPrice,
@@ -67,6 +113,7 @@ const simulateMarketData = (): StockPriceUpdate[] => {
       earnings: Math.random() > 0.5 ? Math.round((Math.random() * 200 + 50) * 100) / 100 : undefined,
     });
   });
+  
   return updates;
 };
 
@@ -78,6 +125,7 @@ const updateStockPrices = (stocks: any[], priceUpdates: StockPriceUpdate[]) => {
       const newPresentValue = Math.round(newCmp * stock.qty * 100) / 100;
       const newGainLoss = Math.round((newPresentValue - stock.investment) * 100) / 100;
       const newGainLossPercentage = stock.investment > 0 ? newGainLoss / stock.investment : 0;
+      
       return {
         ...stock,
         cmp: newCmp,
@@ -97,27 +145,34 @@ const updateStockPrices = (stocks: any[], priceUpdates: StockPriceUpdate[]) => {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const startTime = Date.now();
-  console.log('\n🔄 Portfolio API called - starting market data fetch...');
-  console.log(`🌐 Using ${USE_REAL_API ? 'REAL' : 'SIMULATED'} data source`);
+  console.log('\n🔄 Portfolio API called');
+  console.log('🌍 Environment:', NODE_ENV);
+  console.log('🔧 USE_REAL_API:', USE_REAL_API);
+  console.log('📅 Timestamp:', new Date().toISOString());
+  
   try {
     if (req.method === 'GET') {
       let priceUpdates: StockPriceUpdate[];
       let dataSource: string;
+      
       if (USE_REAL_API) {
-        console.log('🌐 Using REAL API data (Yahoo Finance + Google Finance)...');
+        console.log('🌐 Attempting REAL API data fetch...');
         priceUpdates = await fetchRealMarketData();
+        
         if (priceUpdates.length === 0) {
-          console.log('⚠️ No real data received, falling back to simulation...');
+          console.log('⚠️ Zero real data received, falling back to simulation...');
           priceUpdates = simulateMarketData();
           dataSource = 'simulated-fallback';
         } else if (priceUpdates.length < mockStocks.length) {
-          console.log(`⚠️ Partial real data (${priceUpdates.length}/${mockStocks.length}), filling gaps with simulation...`);
+          console.log(`⚠️ Partial real data (${priceUpdates.length}/${mockStocks.length}), filling gaps...`);
           const receivedSymbols = new Set(priceUpdates.map(u => u.symbol));
           const missingStocks = mockStocks.filter(s => !receivedSymbols.has(s.nseCode));
+          
           missingStocks.forEach(stock => {
             const changePercent = (Math.random() - 0.5) * 0.03;
             const newPrice = stock.cmp * (1 + changePercent);
             const change = newPrice - stock.cmp;
+            
             priceUpdates.push({
               symbol: stock.nseCode,
               price: newPrice,
@@ -125,20 +180,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               changePercent,
             });
           });
+          
           dataSource = 'yahoo-finance-mixed';
         } else {
+          console.log('✅ Full real data received');
           dataSource = 'yahoo-finance-real';
         }
       } else {
-        console.log('🎭 Using SIMULATED data (real API disabled)...');
+        console.log('🎭 Real API disabled, using simulation...');
         priceUpdates = simulateMarketData();
         dataSource = 'simulated';
       }
+      
       const updatedStocks = updateStockPrices(mockStocks, priceUpdates);
       const sectors = groupBySector(updatedStocks);
       const portfolioSummary = calculatePortfolioMetrics(updatedStocks);
+      
       const processingTime = Date.now() - startTime;
-      console.log(`⏱️ Portfolio API completed in ${processingTime}ms`);
+      
       const response = {
         success: true,
         data: {
@@ -156,19 +215,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           updatesCount: priceUpdates.length,
           realDataCount: priceUpdates.filter(u => u.price > 0).length,
           stocksProcessed: updatedStocks.length,
+          environment: NODE_ENV,
+          useRealApi: USE_REAL_API,
         },
       };
-      console.log('📈 Portfolio Summary:', {
-        totalStocks: updatedStocks.length,
-        totalInvestment: portfolioSummary.totalInvestment,
-        totalPresentValue: portfolioSummary.totalPresentValue,
-        totalGainLoss: portfolioSummary.totalGainLoss,
-        dataSource: response.metadata.dataSource
+      
+      console.log('📈 API Response Summary:', {
+        dataSource: response.metadata.dataSource,
+        stocksProcessed: response.metadata.stocksProcessed,
+        processingTime: response.metadata.processingTime,
+        environment: response.metadata.environment
       });
-      console.log(`✅ Successfully processed ${updatedStocks.length} stocks with ${dataSource} data`);
+      
       res.status(200).json(response);
+      
     } else if (req.method === 'POST') {
       const { stocks } = req.body;
+      
       if (!stocks || !Array.isArray(stocks)) {
         return res.status(400).json({
           success: false,
@@ -176,8 +239,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           timestamp: new Date().toISOString(),
         });
       }
+      
       const sectors = groupBySector(stocks);
       const portfolioSummary = calculatePortfolioMetrics(stocks);
+      
       const response = {
         success: true,
         data: {
@@ -193,7 +258,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           dataSource: 'user-provided',
         },
       };
+      
       res.status(200).json(response);
+      
     } else {
       res.setHeader('Allow', ['GET', 'POST']);
       res.status(405).json({
@@ -205,12 +272,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (error) {
     const processingTime = Date.now() - startTime;
     console.error('❌ Portfolio API Error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal Server Error',
-      details: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString(),
-      processingTime: `${processingTime}ms`,
+    
+    // Return fallback data instead of error
+    const fallbackStocks = updateStockPrices(mockStocks, simulateMarketData());
+    const fallbackSectors = groupBySector(fallbackStocks);
+    const fallbackSummary = calculatePortfolioMetrics(fallbackStocks);
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        stocks: fallbackStocks,
+        sectors: fallbackSectors,
+        summary: {
+          ...fallbackSummary,
+          sectors: fallbackSectors,
+        },
+      },
+      metadata: {
+        timestamp: new Date().toISOString(),
+        dataSource: 'simulated-error-fallback',
+        processingTime: `${processingTime}ms`,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        environment: NODE_ENV,
+      },
     });
   }
 }
