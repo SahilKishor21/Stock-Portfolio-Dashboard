@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { formatCurrency, formatPercentage, getGainLossColor } from "@/lib/utils";
 import { usePortfolioStore } from "@/store/portfolioStore";
-import { TrendingUp, TrendingDown, Target, Activity, Wifi, WifiOff } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, Activity, Wifi, WifiOff, CheckCircle } from "lucide-react";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
@@ -36,6 +36,9 @@ export function SectorOverview() {
     );
   }
 
+  const isLiveData = dataSource === 'yahoo-finance-real' || dataSource === 'yahoo-google-finance-real'
+  const isPartialLive = dataSource?.includes('yahoo')
+
   const pieData = sectors.map((sector, index) => ({
     name: sector.sector,
     value: sector.totalInvestment,
@@ -51,13 +54,13 @@ export function SectorOverview() {
 
   return (
     <div className="space-y-6 mb-8">
-      {dataSource !== 'yahoo-finance-real' && (
+      {!isLiveData && (
         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg dark:bg-blue-950 dark:border-blue-800">
           <div className="flex items-center text-blue-800 dark:text-blue-200">
             <Activity className="h-4 w-4 mr-2" />
             <span className="text-sm">
-              {dataSource.includes('yahoo') 
-                ? "Sector data includes both live Yahoo Finance prices and simulated data for some stocks."
+              {isPartialLive 
+                ? "Sector data includes both live Yahoo Finance prices and simulated P/E ratios for enhanced analysis."
                 : "Sector analysis based on simulated market data. Enable live data for real-time sector performance."
               }
             </span>
@@ -72,8 +75,10 @@ export function SectorOverview() {
               <Target className="h-5 w-5" />
               Investment Distribution
               <Badge variant="outline" className="ml-auto">
-                {dataSource === 'yahoo-finance-real' ? (
-                  <><Wifi className="h-3 w-3 mr-1" />Live</>
+                {isLiveData ? (
+                  <><CheckCircle className="h-3 w-3 mr-1 text-green-500" />Live</>
+                ) : isPartialLive ? (
+                  <><Wifi className="h-3 w-3 mr-1 text-yellow-500" />Mixed</>
                 ) : (
                   <><WifiOff className="h-3 w-3 mr-1" />Demo</>
                 )}
@@ -109,8 +114,10 @@ export function SectorOverview() {
               <TrendingUp className="h-5 w-5" />
               Sector Performance
               <Badge variant="outline" className="ml-auto">
-                {dataSource === 'yahoo-finance-real' ? (
-                  <><Wifi className="h-3 w-3 mr-1" />Live</>
+                {isLiveData ? (
+                  <><CheckCircle className="h-3 w-3 mr-1 text-green-500" />Live</>
+                ) : isPartialLive ? (
+                  <><Wifi className="h-3 w-3 mr-1 text-yellow-500" />Mixed</>
                 ) : (
                   <><WifiOff className="h-3 w-3 mr-1" />Demo</>
                 )}
@@ -156,10 +163,6 @@ export function SectorOverview() {
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>Sector Summary</span>
-           {/* <Badge variant="outline">
-              {dataSource === 'yahoo-finance-real' ? 'Live Market Data' : 
-               dataSource.includes('yahoo') ? 'Mixed Data' : 'Demo Data'}
-            </Badge> */}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -182,9 +185,14 @@ export function SectorOverview() {
                     <span className="text-sm text-muted-foreground">
                       {sector.stocks.length} stocks
                     </span>
-                    {dataSource === 'yahoo-finance-real' && (
+                    {isLiveData && (
                       <Badge variant="outline" className="text-xs px-1">
-                        <Wifi className="h-2 w-2" />
+                        <CheckCircle className="h-2 w-2 text-green-500" />
+                      </Badge>
+                    )}
+                    {isPartialLive && !isLiveData && (
+                      <Badge variant="outline" className="text-xs px-1">
+                        <Wifi className="h-2 w-2 text-yellow-500" />
                       </Badge>
                     )}
                   </div>

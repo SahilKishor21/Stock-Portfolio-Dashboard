@@ -20,7 +20,7 @@ export function DashboardHeader() {
 
   
   const handleManualRefresh = () => {
-    refreshPortfolio(true) // Passing true to force refresh
+    refreshPortfolio(true) 
   }
 
   const formatTimeAgo = (timestamp: string) => {
@@ -37,11 +37,11 @@ export function DashboardHeader() {
   }
 
   const getDataSourceBadge = () => {
-    if (dataSource === 'yahoo-finance-real') {
+    if (dataSource === 'yahoo-finance-real' || dataSource === 'yahoo-google-finance-real') {
       return (
         <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-white">
           <CheckCircle className="h-3 w-3 mr-1" />
-          Live Data (Yahoo Finance)
+          Live Data (Yahoo Finance + P/E)
         </Badge>
       )
     } else if (dataSource === 'yahoo-finance-mixed') {
@@ -75,6 +75,8 @@ export function DashboardHeader() {
     }
   }
 
+  const isLiveData = dataSource === 'yahoo-finance-real' || dataSource === 'yahoo-google-finance-real'
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -84,9 +86,7 @@ export function DashboardHeader() {
               Portfolio Dashboard
             </h1>
 
-            {/*debugging batch
-            {getDataSourceBadge()}
-            */}
+           {/*getDataSourceBadge()*/}
 
             {lastUpdated && (
               <Badge variant="outline" className="hidden sm:flex">

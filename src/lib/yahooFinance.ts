@@ -11,47 +11,38 @@ interface YahooFinanceQuote {
 }
 
 interface GoogleFinanceData {
-  symbol: string;
-  peRatio: number | null;
-  latestEarnings: number | null;
+  peRatio: number | null
+  latestEarnings: number | null
+  symbol: string
 }
+
+import googleFinanceHandler from '../pages/api/google-finance/[symbol]';
 
 const getYahooSymbol = (nseCode: string): string => {
   const symbolMap: Record<string, string> = {
-    // Financial Sector
     'HDFCBANK': 'HDFCBANK.NS',
     'BAJFINANCE': 'BAJFINANCE.NS',
     'ICICIBANK': 'ICICIBANK.NS',
     'AXISBANK': 'AXISBANK.NS',
     'KOTAKBANK': 'KOTAKBANK.NS',
     'SBIN': 'SBIN.NS',
-    
-    // Tech Sector
     'TCS': 'TCS.NS',
     'INFY': 'INFY.NS',
     'WIPRO': 'WIPRO.NS',
     'TECHM': 'TECHM.NS',
     'HCLTECH': 'HCLTECH.NS',
     'AFFLE': 'AFFLE.NS',
-    
-    // Consumer Goods
     'HINDUNILVR': 'HINDUNILVR.NS',
     'ITC': 'ITC.NS',
     'NESTLEIND': 'NESTLEIND.NS',
     'BRITANNIA': 'BRITANNIA.NS',
-    
-    // Industrial
     'RELIANCE': 'RELIANCE.NS',
     'LT': 'LT.NS',
     'TATASTEEL': 'TATASTEEL.NS',
     'JSWSTEEL': 'JSWSTEEL.NS',
-    
-    // Healthcare
     'DRREDDY': 'DRREDDY.NS',
     'CIPLA': 'CIPLA.NS',
     'SUNPHARMA': 'SUNPHARMA.NS',
-    
-    // Auto
     'MARUTI': 'MARUTI.NS',
     'M&M': 'M&M.NS',
     'TATAMOTORS': 'TATAMOTORS.NS'
@@ -80,7 +71,7 @@ export const fetchYahooFinanceData = async (nseCode: string): Promise<YahooFinan
     const data = await response.json();
     
     if (!data.chart?.result?.[0]) {
-      throw new Error('Invalid Yahoo Finance response structure');
+      throw new Error('Invalid response structure');
     }
 
     const result = data.chart.result[0];
@@ -97,7 +88,7 @@ export const fetchYahooFinanceData = async (nseCode: string): Promise<YahooFinan
     const change = currentPrice - previousClose;
     const changePercent = (change / previousClose) * 100;
 
-    const yahooData: YahooFinanceQuote = {
+    return {
       symbol: nseCode,
       currentPrice: Number(currentPrice.toFixed(2)),
       previousClose: Number(previousClose.toFixed(2)),
@@ -109,35 +100,48 @@ export const fetchYahooFinanceData = async (nseCode: string): Promise<YahooFinan
       open: Number(quote.open[lastIndex].toFixed(2))
     };
 
-    return yahooData;
-
   } catch (error) {
-    if (error instanceof Error) {
-      console.error(`❌ Yahoo Finance failed for ${nseCode}:`, error.message);
-    } else {
-      console.error(`❌ Yahoo Finance failed for ${nseCode}:`, error);
-    }
     return null;
   }
 };
 
-export const fetchGoogleFinanceData = async (nseCode: string): Promise<GoogleFinanceData | null> => {
+export const fetchGoogleFinanceData = async (symbol: string): Promise<GoogleFinanceData> => {
   try {
-    return {
-      symbol: nseCode,
-      peRatio: null,
-      latestEarnings: null
-    };
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error(`❌ Google Finance failed for ${nseCode}:`, error.message);
-    } else {
-      console.error(`❌ Google Finance failed for ${nseCode}:`, error);
+    let responseData: any = null;
+
+    const mockReq = {
+      query: { symbol },
+      method: 'GET'
+    } as any;
+
+    const mockRes = {
+      status: (code: number) => mockRes,
+      json: (data: any) => {
+        responseData = data;
+        return responseData;
+      }
+    } as any;
+
+    await googleFinanceHandler(mockReq, mockRes);
+    
+    if (!responseData) {
+      throw new Error('No response data');
     }
+    
+    const peRatio = (typeof responseData.peRatio === 'number' && responseData.peRatio > 0) ? responseData.peRatio : null;
+    const latestEarnings = (typeof responseData.latestEarnings === 'number' && responseData.latestEarnings > 0) ? responseData.latestEarnings : null;
+    
     return {
-      symbol: nseCode,
+      peRatio,
+      latestEarnings,
+      symbol
+    };
+    
+  } catch (error) {
+    return {
       peRatio: null,
-      latestEarnings: null
+      latestEarnings: null,
+      symbol
     };
   }
 };
@@ -151,29 +155,28 @@ export const fetchYahooAndGoogleData = async (nseCode: string): Promise<{
   earnings?: number;
 } | null> => {
   try {
-    const yahooData = await fetchYahooFinanceData(nseCode);
-    
-    if (!yahooData) {
+    const [yahooResult, googleResult] = await Promise.allSettled([
+      fetchYahooFinanceData(nseCode),
+      fetchGoogleFinanceData(nseCode)
+    ]);
+
+    const yahoo = yahooResult.status === 'fulfilled' ? yahooResult.value : null;
+    const google = googleResult.status === 'fulfilled' ? googleResult.value : null;
+
+    if (!yahoo) {
       return null;
     }
 
-    const googleData = await fetchGoogleFinanceData(nseCode);
-
     return {
       symbol: nseCode,
-      price: yahooData.currentPrice,
-      change: yahooData.change,
-      changePercent: yahooData.changePercent / 100,
-      peRatio: googleData?.peRatio || undefined,
-      earnings: googleData?.latestEarnings || undefined,
+      price: yahoo.currentPrice,
+      change: yahoo.change,
+      changePercent: yahoo.changePercent / 100,
+      peRatio: google?.peRatio || undefined,
+      earnings: google?.latestEarnings || undefined,
     };
 
   } catch (error) {
-    if (error instanceof Error) {
-      console.error(`❌ Combined fetch failed for ${nseCode}:`, error.message);
-    } else {
-      console.error(`❌ Combined fetch failed for ${nseCode}:`, error);
-    }
     return null;
   }
 };
@@ -195,16 +198,16 @@ export const fetchRealMarketDataYahoo = async (stockSymbols: string[]): Promise<
     earnings?: number;
   }> = [];
   
-  for (const symbol of stockSymbols) {
+  for (let i = 0; i < stockSymbols.length; i++) {
+    const symbol = stockSymbols[i];
     const realData = await fetchYahooAndGoogleData(symbol);
     
     if (realData) {
       updates.push(realData);
     }
 
-    // Add delay between requests to be respectful
-    if (stockSymbols.indexOf(symbol) < stockSymbols.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay
+    if (i < stockSymbols.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 800));
     }
   }
   

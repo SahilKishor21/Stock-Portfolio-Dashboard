@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { TrendingUp, TrendingDown, DollarSign, Target, Activity, Wifi, WifiOff } from "lucide-react"
+import { TrendingUp, TrendingDown, DollarSign, Target, Activity, Wifi, WifiOff, CheckCircle } from "lucide-react"
 import { formatCurrency, formatPercentage, getGainLossColor } from "@/lib/utils"
 import { usePortfolioStore } from "@/store/portfolioStore"
 
@@ -27,7 +27,9 @@ export function PortfolioSummary() {
     )
   }
 
-  const showDataWarning = dataSource.includes('simulated') || dataSource.includes('fallback')
+  const isLiveData = dataSource === 'yahoo-finance-real' || dataSource === 'yahoo-google-finance-real'
+  const isPartialLive = dataSource?.includes('yahoo') && !isLiveData
+  const showDataWarning = dataSource?.includes('simulated') && dataSource?.includes('fallback')
 
   const {
     totalInvestment,
@@ -80,7 +82,7 @@ export function PortfolioSummary() {
           <div className="flex items-center text-yellow-800 dark:text-yellow-200">
             <WifiOff className="h-4 w-4 mr-2" />
             <span className="text-sm">
-              {dataSource.includes('fallback') 
+              {dataSource?.includes('fallback') 
                 ? "Currently showing demo data due to API connectivity issues. Real-time data will resume automatically."
                 : "Portfolio showing demo data. Enable real-time updates to see live market prices."
               }
@@ -89,12 +91,23 @@ export function PortfolioSummary() {
         </div>
       )}
 
-      {dataSource === 'yahoo-finance-real' && (
+      {isLiveData && (
         <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg dark:bg-green-950 dark:border-green-800">
           <div className="flex items-center text-green-800 dark:text-green-200">
             <Activity className="h-4 w-4 mr-2" />
             <span className="text-sm">
               Portfolio displaying live stock prices. Automatically updates every 5 minutes.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {isPartialLive && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg dark:bg-blue-950 dark:border-blue-800">
+          <div className="flex items-center text-blue-800 dark:text-blue-200">
+            <Activity className="h-4 w-4 mr-2" />
+            <span className="text-sm">
+              Portfolio includes both live Yahoo Finance prices and simulated data for some stocks.
             </span>
           </div>
         </div>
@@ -120,8 +133,13 @@ export function PortfolioSummary() {
               {(card.title === "Current Value" || card.title === "Total Gain/Loss") && (
                 <div className="mt-2">
                   <Badge variant="outline" className="text-xs">
-                    {dataSource === 'yahoo-finance-real' ? '🟢 Live' : 
-                     dataSource.includes('yahoo') ? '🟡 Mixed' : '🔴 Demo'}
+                    {isLiveData ? (
+                      <><CheckCircle className="h-3 w-3 mr-1 text-green-500" />Live</>
+                    ) : isPartialLive ? (
+                      <><Wifi className="h-3 w-3 mr-1 text-yellow-500" />Mixed</>
+                    ) : (
+                      <><WifiOff className="h-3 w-3 mr-1 text-red-500" />Demo</>
+                    )}
                   </Badge>
                 </div>
               )}
