@@ -118,11 +118,25 @@ export function SectorOverview() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={barData}>
+            <ResponsiveContainer width="100%" height={350}>
+              <BarChart 
+                data={barData}
+                margin={{
+                  top: 20,
+                  right: 30,
+                  left: 20,
+                  bottom: 60,
+                }}
+              >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="sector" />
-                <YAxis />
+                <XAxis 
+                  dataKey="sector" 
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                  interval={0}
+                />
+                <YAxis width={80} />
                 <Tooltip 
                   formatter={(value, name) => [
                     formatCurrency(value as number), 
