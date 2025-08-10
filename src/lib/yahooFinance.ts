@@ -18,40 +18,36 @@ interface GoogleFinanceData {
 
 import googleFinanceHandler from '../pages/api/google-finance/[symbol]';
 
+// Store results for 5 minutes
+const cache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; 
+
 const getYahooSymbol = (nseCode: string): string => {
   const symbolMap: Record<string, string> = {
-    'HDFCBANK': 'HDFCBANK.NS',
-    'BAJFINANCE': 'BAJFINANCE.NS',
-    'ICICIBANK': 'ICICIBANK.NS',
-    'AXISBANK': 'AXISBANK.NS',
-    'KOTAKBANK': 'KOTAKBANK.NS',
-    'SBIN': 'SBIN.NS',
-    'TCS': 'TCS.NS',
-    'INFY': 'INFY.NS',
-    'WIPRO': 'WIPRO.NS',
-    'TECHM': 'TECHM.NS',
-    'HCLTECH': 'HCLTECH.NS',
-    'AFFLE': 'AFFLE.NS',
-    'HINDUNILVR': 'HINDUNILVR.NS',
-    'ITC': 'ITC.NS',
-    'NESTLEIND': 'NESTLEIND.NS',
-    'BRITANNIA': 'BRITANNIA.NS',
-    'RELIANCE': 'RELIANCE.NS',
-    'LT': 'LT.NS',
-    'TATASTEEL': 'TATASTEEL.NS',
-    'JSWSTEEL': 'JSWSTEEL.NS',
-    'DRREDDY': 'DRREDDY.NS',
-    'CIPLA': 'CIPLA.NS',
-    'SUNPHARMA': 'SUNPHARMA.NS',
-    'MARUTI': 'MARUTI.NS',
-    'M&M': 'M&M.NS',
-    'TATAMOTORS': 'TATAMOTORS.NS'
+    'HDFCBANK': 'HDFCBANK.NS', 'BAJFINANCE': 'BAJFINANCE.NS', 'ICICIBANK': 'ICICIBANK.NS',
+    'AXISBANK': 'AXISBANK.NS', 'KOTAKBANK': 'KOTAKBANK.NS', 'SBIN': 'SBIN.NS',
+    'TCS': 'TCS.NS', 'INFY': 'INFY.NS', 'WIPRO': 'WIPRO.NS',
+    'TECHM': 'TECHM.NS', 'HCLTECH': 'HCLTECH.NS', 'AFFLE': 'AFFLE.NS',
+    'HINDUNILVR': 'HINDUNILVR.NS', 'ITC': 'ITC.NS', 'NESTLEIND': 'NESTLEIND.NS',
+    'BRITANNIA': 'BRITANNIA.NS', 'RELIANCE': 'RELIANCE.NS', 'LT': 'LT.NS',
+    'TATASTEEL': 'TATASTEEL.NS', 'JSWSTEEL': 'JSWSTEEL.NS', 'DRREDDY': 'DRREDDY.NS',
+    'CIPLA': 'CIPLA.NS', 'SUNPHARMA': 'SUNPHARMA.NS', 'MARUTI': 'MARUTI.NS',
+    'M&M': 'M&M.NS', 'TATAMOTORS': 'TATAMOTORS.NS'
   };
-  
   return symbolMap[nseCode] || `${nseCode}.NS`;
 };
 
+const isValidCacheEntry = (entry: { data: any; timestamp: number }): boolean => {
+  return Date.now() - entry.timestamp < CACHE_DURATION;
+};
+
 export const fetchYahooFinanceData = async (nseCode: string): Promise<YahooFinanceQuote | null> => {
+  const cacheKey = `yahoo_${nseCode}`;
+  const cached = cache.get(cacheKey);
+  if (cached && isValidCacheEntry(cached)) {
+    return cached.data;
+  }
+
   const yahooSymbol = getYahooSymbol(nseCode);
   
   try {
@@ -64,23 +60,16 @@ export const fetchYahooFinanceData = async (nseCode: string): Promise<YahooFinan
       }
     );
 
-    if (!response.ok) {
-      throw new Error(`Yahoo Finance API error: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`Yahoo Finance API error: ${response.status}`);
 
     const data = await response.json();
-    
-    if (!data.chart?.result?.[0]) {
-      throw new Error('Invalid response structure');
-    }
+    if (!data.chart?.result?.[0]) throw new Error('Invalid response structure');
 
     const result = data.chart.result[0];
     const meta = result.meta;
     const quote = result.indicators?.quote?.[0];
     
-    if (!quote || !meta) {
-      throw new Error('Missing quote data');
-    }
+    if (!quote || !meta) throw new Error('Missing quote data');
 
     const lastIndex = quote.close.length - 1;
     const currentPrice = quote.close[lastIndex];
@@ -88,7 +77,7 @@ export const fetchYahooFinanceData = async (nseCode: string): Promise<YahooFinan
     const change = currentPrice - previousClose;
     const changePercent = (change / previousClose) * 100;
 
-    return {
+    const yahooData = {
       symbol: nseCode,
       currentPrice: Number(currentPrice.toFixed(2)),
       previousClose: Number(previousClose.toFixed(2)),
@@ -100,49 +89,44 @@ export const fetchYahooFinanceData = async (nseCode: string): Promise<YahooFinan
       open: Number(quote.open[lastIndex].toFixed(2))
     };
 
+    cache.set(cacheKey, { data: yahooData, timestamp: Date.now() });
+    return yahooData;
+
   } catch (error) {
     return null;
   }
 };
 
 export const fetchGoogleFinanceData = async (symbol: string): Promise<GoogleFinanceData> => {
+  const cacheKey = `google_${symbol}`;
+  const cached = cache.get(cacheKey);
+  if (cached && isValidCacheEntry(cached)) {
+    return cached.data;
+  }
+
   try {
     let responseData: any = null;
 
-    const mockReq = {
-      query: { symbol },
-      method: 'GET'
-    } as any;
-
+    const mockReq = { query: { symbol }, method: 'GET' } as any;
     const mockRes = {
       status: (code: number) => mockRes,
-      json: (data: any) => {
-        responseData = data;
-        return responseData;
-      }
+      json: (data: any) => { responseData = data; return responseData; }
     } as any;
 
     await googleFinanceHandler(mockReq, mockRes);
     
-    if (!responseData) {
-      throw new Error('No response data');
-    }
+    if (!responseData) throw new Error('No response data');
     
     const peRatio = (typeof responseData.peRatio === 'number' && responseData.peRatio > 0) ? responseData.peRatio : null;
     const latestEarnings = (typeof responseData.latestEarnings === 'number' && responseData.latestEarnings > 0) ? responseData.latestEarnings : null;
     
-    return {
-      peRatio,
-      latestEarnings,
-      symbol
-    };
+    const result = { peRatio, latestEarnings, symbol };
+    
+    cache.set(cacheKey, { data: result, timestamp: Date.now() });
+    return result;
     
   } catch (error) {
-    return {
-      peRatio: null,
-      latestEarnings: null,
-      symbol
-    };
+    return { peRatio: null, latestEarnings: null, symbol };
   }
 };
 
@@ -155,6 +139,7 @@ export const fetchYahooAndGoogleData = async (nseCode: string): Promise<{
   earnings?: number;
 } | null> => {
   try {
+    // Fetching both APIs parallely
     const [yahooResult, googleResult] = await Promise.allSettled([
       fetchYahooFinanceData(nseCode),
       fetchGoogleFinanceData(nseCode)
@@ -163,9 +148,7 @@ export const fetchYahooAndGoogleData = async (nseCode: string): Promise<{
     const yahoo = yahooResult.status === 'fulfilled' ? yahooResult.value : null;
     const google = googleResult.status === 'fulfilled' ? googleResult.value : null;
 
-    if (!yahoo) {
-      return null;
-    }
+    if (!yahoo) return null;
 
     return {
       symbol: nseCode,
@@ -181,6 +164,7 @@ export const fetchYahooAndGoogleData = async (nseCode: string): Promise<{
   }
 };
 
+// Parallel processing with controlled concurrency
 export const fetchRealMarketDataYahoo = async (stockSymbols: string[]): Promise<Array<{
   symbol: string;
   price: number;
@@ -189,6 +173,7 @@ export const fetchRealMarketDataYahoo = async (stockSymbols: string[]): Promise<
   peRatio?: number;
   earnings?: number;
 }>> => {
+  const BATCH_SIZE = 8;
   const updates: Array<{
     symbol: string;
     price: number;
@@ -197,19 +182,32 @@ export const fetchRealMarketDataYahoo = async (stockSymbols: string[]): Promise<
     peRatio?: number;
     earnings?: number;
   }> = [];
-  
-  for (let i = 0; i < stockSymbols.length; i++) {
-    const symbol = stockSymbols[i];
-    const realData = await fetchYahooAndGoogleData(symbol);
-    
-    if (realData) {
-      updates.push(realData);
-    }
 
-    if (i < stockSymbols.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 800));
+  for (let i = 0; i < stockSymbols.length; i += BATCH_SIZE) {
+    const batch = stockSymbols.slice(i, i + BATCH_SIZE);
+    const batchPromises = batch.map(symbol => fetchYahooAndGoogleData(symbol));
+    const batchResults = await Promise.allSettled(batchPromises);
+    
+    batchResults.forEach(result => {
+      if (result.status === 'fulfilled' && result.value) {
+        updates.push(result.value);
+      }
+    });
+
+    if (i + BATCH_SIZE < stockSymbols.length) {
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
   }
   
   return updates;
+};
+
+// Cache cleaner
+export const cleanupCache = () => {
+  const now = Date.now();
+  cache.forEach((entry, key) => {
+    if (now - entry.timestamp > CACHE_DURATION) {
+      cache.delete(key);
+    }
+  });
 };
