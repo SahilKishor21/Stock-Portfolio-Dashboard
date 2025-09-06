@@ -212,10 +212,22 @@ export function SectorOverview() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-muted-foreground">Gain/Loss:</span>
                     <div className="text-right">
-                      <div className={`font-medium ${getGainLossColor(sector.totalGainLoss)}`}>
+                      <div className={`font-medium ${
+                        sector.totalGainLoss > 0 
+                          ? 'text-green-500' 
+                          : sector.totalGainLoss < 0 
+                            ? 'text-red-500' 
+                            : 'text-gray-500'
+                      }`}>
                         {formatCurrency(sector.totalGainLoss)}
                       </div>
-                      <div className={`text-sm ${getGainLossColor(sector.totalGainLoss)}`}>
+                      <div className={`text-sm ${
+                        sector.totalGainLoss > 0 
+                          ? 'text-green-500' 
+                          : sector.totalGainLoss < 0 
+                            ? 'text-red-500' 
+                            : 'text-gray-500'
+                      }`}>
                         {formatPercentage(sector.gainLossPercentage)}
                       </div>
                     </div>

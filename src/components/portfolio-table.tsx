@@ -99,7 +99,12 @@ PriceCell.displayName = "PriceCell"
 const GainLossCell = memo(({ row }: { row: any }) => {
   const gainLoss = row.getValue("gainLoss") as number
   const gainLossPercentage = row.original.gainLossPercentage
-  const colorClass = useMemo(() => getGainLossColor(gainLoss), [gainLoss])
+  
+  const colorClass = useMemo(() => {
+    if (gainLoss > 0) return 'text-green-500'
+    if (gainLoss < 0) return 'text-red-500'
+    return 'text-gray-500'
+  }, [gainLoss])
   
   return (
     <div className={`font-medium ${colorClass}`}>

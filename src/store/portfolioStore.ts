@@ -38,11 +38,11 @@ const shouldRefresh = (lastUpdated: string | null, dataSource: string): boolean 
   let refreshThreshold: number
   
   if (dataSource.includes('yahoo-finance-real')) {
-    refreshThreshold = 5 * 60 * 1000 // 5 minutes for real data
+    refreshThreshold = 5 * 60 * 1000 
   } else if (dataSource.includes('mixed') || dataSource.includes('yahoo')) {
-    refreshThreshold = 3 * 60 * 1000 // 3 minutes for mixed data
+    refreshThreshold = 3 * 60 * 1000 
   } else {
-    refreshThreshold = 10 * 60 * 1000 // 10 minutes for simulated data
+    refreshThreshold = 10 * 60 * 1000 
   }
   
   return timeDiff > refreshThreshold
@@ -57,7 +57,7 @@ export const usePortfolioStore = create<PortfolioState>()(
       isLoading: false,
       error: null,
       lastUpdated: null,
-      refreshInterval: 300000, // 5 minutes default
+      refreshInterval: 300000, 
       isAutoRefresh: true,
       selectedSector: null,
       dataSource: 'unknown',
@@ -73,11 +73,11 @@ export const usePortfolioStore = create<PortfolioState>()(
         if (source !== currentSource) {
           let newInterval = get().refreshInterval
           if (source.includes('yahoo-finance-real')) {
-            newInterval = 300000 // 5 minutes for real data
+            newInterval = 300000 
           } else if (source.includes('mixed') || source.includes('yahoo')) {
-            newInterval = 180000 // 3 minutes for mixed data
+            newInterval = 180000 
           } else {
-            newInterval = 600000 // 10 minutes for simulated data
+            newInterval = 600000 
           }
           
           set({ 
@@ -102,7 +102,7 @@ export const usePortfolioStore = create<PortfolioState>()(
           return
         }
         
-        // Allow manual refresh to bypass time check
+        // Allowing manual refresh to bypass time check
         if (!force && !shouldRefresh(lastUpdated, dataSource)) {
           return
         }
