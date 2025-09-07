@@ -11,7 +11,6 @@ interface StockPriceUpdate {
   peRatio?: number;
   earnings?: number;
   marketCap?: number;
-  sharesOutstanding?: number;
 }
 
 const USE_REAL_API = process.env.USE_REAL_API !== "false";
@@ -38,10 +37,6 @@ const simulateMarketData = (): StockPriceUpdate[] => {
 
     const newPrice = stock.cmp * (1 + changePercent);
     const change = newPrice - stock.cmp;
-    
-    // Simulate market cap change based on price change
-    const priceRatio = newPrice / stock.cmp;
-    const newMarketCap = stock.marketCap ? Math.round(stock.marketCap * priceRatio) : undefined;
 
     updates.push({
       symbol: stock.nseCode,
@@ -50,7 +45,6 @@ const simulateMarketData = (): StockPriceUpdate[] => {
       changePercent,
       peRatio: Math.random() > 0.5 ? Math.round((Math.random() * 40 + 10) * 100) / 100 : undefined,
       earnings: Math.random() > 0.5 ? Math.round((Math.random() * 200 + 50) * 100) / 100 : undefined,
-      marketCap: newMarketCap,
     });
   });
 
@@ -58,7 +52,7 @@ const simulateMarketData = (): StockPriceUpdate[] => {
 };
 
 const updateStockPrices = (stocks: any[], priceUpdates: StockPriceUpdate[]) => {
-  // First pass: Update individual stock prices and market caps
+  // First pass: Update individual stock prices and calculate market caps
   const updatedStocks = stocks.map((stock) => {
     const update = priceUpdates.find((u) => u.symbol === stock.nseCode);
     if (update) {
@@ -66,18 +60,8 @@ const updateStockPrices = (stocks: any[], priceUpdates: StockPriceUpdate[]) => {
       const newPresentValue = Math.round(newCmp * stock.qty * 100) / 100;
       const newGainLoss = Math.round((newPresentValue - stock.investment) * 100) / 100;
       const newGainLossPercentage = stock.investment > 0 ? newGainLoss / stock.investment : 0;
-
-      // Calculate market cap using multiple approaches
-      let newMarketCap = stock.marketCap; // Default to existing value
-      
-      if (update.marketCap) {
-        // Use API-provided market cap if available
-        newMarketCap = update.marketCap;
-      } else if (update.sharesOutstanding) {
-        // Calculate from shares outstanding if available
-        newMarketCap = Math.round(newCmp * update.sharesOutstanding);
-      } else if (stock.marketCap && stock.cmp > 0) {
-        // Estimate based on price change ratio
+      let newMarketCap = stock.marketCap;
+      if (stock.marketCap && stock.cmp > 0) {
         const priceRatio = newCmp / stock.cmp;
         newMarketCap = Math.round(stock.marketCap * priceRatio);
       }
@@ -131,16 +115,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const realPECount = priceUpdates.filter(
             (u) => u.peRatio !== undefined && u.peRatio !== null
           ).length;
-          const realMarketCapCount = priceUpdates.filter(
-            (u) => u.marketCap !== undefined && u.marketCap !== null
-          ).length;
-          
-          if (realPECount > 0 && realMarketCapCount > 0) {
+          if (realPECount > 0) {
             dataSource = "yahoo-google-finance-real";
-          } else if (realMarketCapCount > 0) {
-            dataSource = "yahoo-finance-real";
           } else {
-            dataSource = "yahoo-finance-basic";
+            dataSource = "yahoo-finance-real";
           }
         }
       } else {
@@ -166,7 +144,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           dataSource,
           updatesCount: priceUpdates.length,
           realDataCount: priceUpdates.filter((u) => u.price > 0).length,
-          marketCapUpdates: priceUpdates.filter((u) => u.marketCap !== undefined).length,
           stocksProcessed: updatedStocks.length,
           environment: NODE_ENV,
           useRealApi: USE_REAL_API,

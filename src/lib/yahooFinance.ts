@@ -20,7 +20,7 @@ interface GoogleFinanceData {
 
 import googleFinanceHandler from '../pages/api/google-finance/[symbol]';
 
-// Store results for 5 minutes
+// Storing results for 5 minutes
 const cache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; 
 
@@ -53,24 +53,21 @@ export const fetchYahooFinanceData = async (nseCode: string): Promise<YahooFinan
   const yahooSymbol = getYahooSymbol(nseCode);
   
   try {
-    // Fetch both chart data and summary data for complete information
-    const [chartResponse, summaryResponse] = await Promise.allSettled([
-      fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}`, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-      }),
-      fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${yahooSymbol}?modules=defaultKeyStatistics,price`, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-      })
-    ]);
+    const response = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}`,
+      {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      }
+    );
 
-    if (chartResponse.status !== 'fulfilled' || !chartResponse.value.ok) {
-      throw new Error('Chart data fetch failed');
-    }
+    if (!response.ok) throw new Error(`Yahoo Finance API error: ${response.status}`);
 
-    const chartData = await chartResponse.value.json();
-    if (!chartData.chart?.result?.[0]) throw new Error('Invalid chart response structure');
+    const data = await response.json();
+    if (!data.chart?.result?.[0]) throw new Error('Invalid response structure');
 
-    const result = chartData.chart.result[0];
+    const result = data.chart.result[0];
     const meta = result.meta;
     const quote = result.indicators?.quote?.[0];
     
@@ -82,30 +79,6 @@ export const fetchYahooFinanceData = async (nseCode: string): Promise<YahooFinan
     const change = currentPrice - previousClose;
     const changePercent = (change / previousClose) * 100;
 
-    // Extract market cap and shares outstanding from summary data
-    let marketCap = null;
-    let sharesOutstanding = null;
-
-    if (summaryResponse.status === 'fulfilled' && summaryResponse.value.ok) {
-      try {
-        const summaryData = await summaryResponse.value.json();
-        const stats = summaryData.quoteSummary?.result?.[0];
-        
-        marketCap = stats?.defaultKeyStatistics?.marketCap?.raw || 
-                   stats?.price?.marketCap?.raw || null;
-        
-        sharesOutstanding = stats?.defaultKeyStatistics?.sharesOutstanding?.raw ||
-                           stats?.defaultKeyStatistics?.impliedSharesOutstanding?.raw || null;
-        
-        // If we have shares outstanding but no market cap, calculate it
-        if (!marketCap && sharesOutstanding && currentPrice) {
-          marketCap = currentPrice * sharesOutstanding;
-        }
-      } catch (summaryError) {
-        console.warn('Failed to parse summary data:', summaryError);
-      }
-    }
-
     const yahooData = {
       symbol: nseCode,
       currentPrice: Number(currentPrice.toFixed(2)),
@@ -115,9 +88,7 @@ export const fetchYahooFinanceData = async (nseCode: string): Promise<YahooFinan
       volume: quote.volume[lastIndex] || 0,
       high: Number(quote.high[lastIndex].toFixed(2)),
       low: Number(quote.low[lastIndex].toFixed(2)),
-      open: Number(quote.open[lastIndex].toFixed(2)),
-      marketCap: marketCap,
-      sharesOutstanding: sharesOutstanding
+      open: Number(quote.open[lastIndex].toFixed(2))
     };
 
     cache.set(cacheKey, { data: yahooData, timestamp: Date.now() });
@@ -169,7 +140,6 @@ export const fetchYahooAndGoogleData = async (nseCode: string): Promise<{
   peRatio?: number;
   earnings?: number;
   marketCap?: number;
-  sharesOutstanding?: number;
 } | null> => {
   try {
     // Fetching both APIs parallely
@@ -190,8 +160,7 @@ export const fetchYahooAndGoogleData = async (nseCode: string): Promise<{
       changePercent: yahoo.changePercent / 100,
       peRatio: google?.peRatio || undefined,
       earnings: google?.latestEarnings || undefined,
-      marketCap: yahoo.marketCap || undefined,
-      sharesOutstanding: yahoo.sharesOutstanding || undefined,
+      marketCap: undefined 
     };
 
   } catch (error) {
@@ -199,7 +168,7 @@ export const fetchYahooAndGoogleData = async (nseCode: string): Promise<{
   }
 };
 
-// Parallel processing with controlled concurrency
+// Parallel processing 
 export const fetchRealMarketDataYahoo = async (stockSymbols: string[]): Promise<Array<{
   symbol: string;
   price: number;
@@ -208,7 +177,6 @@ export const fetchRealMarketDataYahoo = async (stockSymbols: string[]): Promise<
   peRatio?: number;
   earnings?: number;
   marketCap?: number;
-  sharesOutstanding?: number;
 }>> => {
   const BATCH_SIZE = 8;
   const updates: Array<{
@@ -219,7 +187,6 @@ export const fetchRealMarketDataYahoo = async (stockSymbols: string[]): Promise<
     peRatio?: number;
     earnings?: number;
     marketCap?: number;
-    sharesOutstanding?: number;
   }> = [];
 
   for (let i = 0; i < stockSymbols.length; i += BATCH_SIZE) {
