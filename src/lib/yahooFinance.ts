@@ -8,8 +8,6 @@ interface YahooFinanceQuote {
   high: number;
   low: number;
   open: number;
-  marketCap?: number;
-  sharesOutstanding?: number;
 }
 
 interface GoogleFinanceData {
@@ -43,11 +41,18 @@ const isValidCacheEntry = (entry: { data: any; timestamp: number }): boolean => 
   return Date.now() - entry.timestamp < CACHE_DURATION;
 };
 
-export const fetchYahooFinanceData = async (nseCode: string): Promise<YahooFinanceQuote | null> => {
+export const fetchYahooFinanceData = async (
+  nseCode: string, 
+  bypassCache = false
+): Promise<YahooFinanceQuote | null> => {
   const cacheKey = `yahoo_${nseCode}`;
-  const cached = cache.get(cacheKey);
-  if (cached && isValidCacheEntry(cached)) {
-    return cached.data;
+  
+  // Only check cache if not bypassing
+  if (!bypassCache) {
+    const cached = cache.get(cacheKey);
+    if (cached && isValidCacheEntry(cached)) {
+      return cached.data;
+    }
   }
 
   const yahooSymbol = getYahooSymbol(nseCode);
@@ -99,11 +104,17 @@ export const fetchYahooFinanceData = async (nseCode: string): Promise<YahooFinan
   }
 };
 
-export const fetchGoogleFinanceData = async (symbol: string): Promise<GoogleFinanceData> => {
+export const fetchGoogleFinanceData = async (
+  symbol: string, 
+  bypassCache = false
+): Promise<GoogleFinanceData> => {
   const cacheKey = `google_${symbol}`;
-  const cached = cache.get(cacheKey);
-  if (cached && isValidCacheEntry(cached)) {
-    return cached.data;
+  
+  if (!bypassCache) {
+    const cached = cache.get(cacheKey);
+    if (cached && isValidCacheEntry(cached)) {
+      return cached.data;
+    }
   }
 
   try {
@@ -123,7 +134,7 @@ export const fetchGoogleFinanceData = async (symbol: string): Promise<GoogleFina
     const latestEarnings = (typeof responseData.latestEarnings === 'number' && responseData.latestEarnings > 0) ? responseData.latestEarnings : null;
     
     const result = { peRatio, latestEarnings, symbol };
-    
+
     cache.set(cacheKey, { data: result, timestamp: Date.now() });
     return result;
     
@@ -132,7 +143,10 @@ export const fetchGoogleFinanceData = async (symbol: string): Promise<GoogleFina
   }
 };
 
-export const fetchYahooAndGoogleData = async (nseCode: string): Promise<{
+export const fetchYahooAndGoogleData = async (
+  nseCode: string, 
+  bypassCache = false
+): Promise<{
   symbol: string;
   price: number;
   change: number;
@@ -142,10 +156,10 @@ export const fetchYahooAndGoogleData = async (nseCode: string): Promise<{
   marketCap?: number;
 } | null> => {
   try {
-    // Fetching both APIs parallely
+    // Pass bypassCache parameter to both APIs
     const [yahooResult, googleResult] = await Promise.allSettled([
-      fetchYahooFinanceData(nseCode),
-      fetchGoogleFinanceData(nseCode)
+      fetchYahooFinanceData(nseCode, bypassCache),
+      fetchGoogleFinanceData(nseCode, bypassCache)
     ]);
 
     const yahoo = yahooResult.status === 'fulfilled' ? yahooResult.value : null;
@@ -168,8 +182,10 @@ export const fetchYahooAndGoogleData = async (nseCode: string): Promise<{
   }
 };
 
-// Parallel processing 
-export const fetchRealMarketDataYahoo = async (stockSymbols: string[]): Promise<Array<{
+export const fetchRealMarketDataYahoo = async (
+  stockSymbols: string[], 
+  bypassCache = false
+): Promise<Array<{
   symbol: string;
   price: number;
   change: number;
@@ -191,7 +207,7 @@ export const fetchRealMarketDataYahoo = async (stockSymbols: string[]): Promise<
 
   for (let i = 0; i < stockSymbols.length; i += BATCH_SIZE) {
     const batch = stockSymbols.slice(i, i + BATCH_SIZE);
-    const batchPromises = batch.map(symbol => fetchYahooAndGoogleData(symbol));
+    const batchPromises = batch.map(symbol => fetchYahooAndGoogleData(symbol, bypassCache));
     const batchResults = await Promise.allSettled(batchPromises);
     
     batchResults.forEach(result => {

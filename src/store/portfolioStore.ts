@@ -102,7 +102,6 @@ export const usePortfolioStore = create<PortfolioState>()(
           return
         }
         
-        // Allowing manual refresh to bypass time check
         if (!force && !shouldRefresh(lastUpdated, dataSource)) {
           return
         }
@@ -114,7 +113,8 @@ export const usePortfolioStore = create<PortfolioState>()(
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
-              'Cache-Control': 'no-cache'
+              'Cache-Control': 'no-cache',
+              'X-Bypass-Cache': force ? 'true' : 'false'
             },
           })
           

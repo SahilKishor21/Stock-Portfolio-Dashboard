@@ -16,7 +16,7 @@ interface StockPriceUpdate {
 const USE_REAL_API = process.env.USE_REAL_API !== "false";
 const NODE_ENV = process.env.NODE_ENV;
 
-const fetchRealMarketData = async (): Promise<StockPriceUpdate[]> => {
+const fetchRealMarketData = async (bypassCache = false): Promise<StockPriceUpdate[]> => {
   try {
     const stockSymbols = mockStocks.map((stock) => stock.nseCode);
     const updates = await fetchRealMarketDataYahoo(stockSymbols);
@@ -60,6 +60,7 @@ const updateStockPrices = (stocks: any[], priceUpdates: StockPriceUpdate[]) => {
       const newPresentValue = Math.round(newCmp * stock.qty * 100) / 100;
       const newGainLoss = Math.round((newPresentValue - stock.investment) * 100) / 100;
       const newGainLossPercentage = stock.investment > 0 ? newGainLoss / stock.investment : 0;
+
       let newMarketCap = stock.marketCap;
       if (stock.marketCap && stock.cmp > 0) {
         const priceRatio = newCmp / stock.cmp;
@@ -101,11 +102,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     if (req.method === "GET") {
+      const bypassCache = req.headers['x-bypass-cache'] === 'true';
+      
       let priceUpdates: StockPriceUpdate[];
       let dataSource: string;
 
       if (USE_REAL_API) {
-        priceUpdates = await fetchRealMarketData();
+        priceUpdates = await fetchRealMarketData(bypassCache);
 
         if (priceUpdates.length === 0) {
           dataSource = "simulated-fallback";
@@ -147,6 +150,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           stocksProcessed: updatedStocks.length,
           environment: NODE_ENV,
           useRealApi: USE_REAL_API,
+          cacheBypass: bypassCache, 
         },
       });
     } else if (req.method === "POST") {
@@ -159,8 +163,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           timestamp: new Date().toISOString(),
         });
       }
-
-      // For POST requests, also recalculate portfolio percentages
       const totalCurrentValue = stocks.reduce((sum, stock) => sum + stock.presentValue, 0);
       const stocksWithUpdatedPercentages = stocks.map((stock) => ({
         ...stock,
