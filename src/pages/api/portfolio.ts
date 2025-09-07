@@ -51,7 +51,8 @@ const simulateMarketData = (): StockPriceUpdate[] => {
 };
 
 const updateStockPrices = (stocks: any[], priceUpdates: StockPriceUpdate[]) => {
-  return stocks.map((stock) => {
+  // First pass: Update individual stock prices
+  const updatedStocks = stocks.map((stock) => {
     const update = priceUpdates.find((u) => u.symbol === stock.nseCode);
     if (update) {
       const newCmp = Math.round(update.price * 100) / 100;
@@ -74,6 +75,18 @@ const updateStockPrices = (stocks: any[], priceUpdates: StockPriceUpdate[]) => {
     }
     return stock;
   });
+
+  // Second pass: Recalculate portfolio percentages based on current values
+  const totalCurrentValue = updatedStocks.reduce((sum, stock) => sum + stock.presentValue, 0);
+  
+  const stocksWithUpdatedPercentages = updatedStocks.map((stock) => ({
+    ...stock,
+    portfolioPercentage: totalCurrentValue > 0 
+      ? (stock.presentValue / totalCurrentValue) 
+      : 0
+  }));
+
+  return stocksWithUpdatedPercentages;
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -140,13 +153,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
 
-      const sectors = groupBySector(stocks);
-      const portfolioSummary = calculatePortfolioMetrics(stocks);
+      // For POST requests, also recalculate portfolio percentages
+      const totalCurrentValue = stocks.reduce((sum, stock) => sum + stock.presentValue, 0);
+      const stocksWithUpdatedPercentages = stocks.map((stock) => ({
+        ...stock,
+        portfolioPercentage: totalCurrentValue > 0 
+          ? (stock.presentValue / totalCurrentValue) 
+          : 0
+      }));
+
+      const sectors = groupBySector(stocksWithUpdatedPercentages);
+      const portfolioSummary = calculatePortfolioMetrics(stocksWithUpdatedPercentages);
 
       res.status(200).json({
         success: true,
         data: {
-          stocks,
+          stocks: stocksWithUpdatedPercentages,
           sectors,
           summary: { ...portfolioSummary, sectors },
         },
