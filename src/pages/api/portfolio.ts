@@ -16,10 +16,12 @@ interface StockPriceUpdate {
 const USE_REAL_API = process.env.USE_REAL_API !== "false";
 const NODE_ENV = process.env.NODE_ENV;
 
+// Fixed: Pass bypassCache parameter through
 const fetchRealMarketData = async (bypassCache = false): Promise<StockPriceUpdate[]> => {
   try {
     const stockSymbols = mockStocks.map((stock) => stock.nseCode);
-    const updates = await fetchRealMarketDataYahoo(stockSymbols);
+    // Fixed: Now passing bypassCache parameter
+    const updates = await fetchRealMarketDataYahoo(stockSymbols, bypassCache);
     return updates;
   } catch (error) {
     return [];
@@ -52,7 +54,7 @@ const simulateMarketData = (): StockPriceUpdate[] => {
 };
 
 const updateStockPrices = (stocks: any[], priceUpdates: StockPriceUpdate[]) => {
-  // First pass: Update individual stock prices and calculate market caps
+  // First pass: Updating individual stock prices and calculate market caps (using yahoofinance API)
   const updatedStocks = stocks.map((stock) => {
     const update = priceUpdates.find((u) => u.symbol === stock.nseCode);
     if (update) {
@@ -84,7 +86,7 @@ const updateStockPrices = (stocks: any[], priceUpdates: StockPriceUpdate[]) => {
     return stock;
   });
 
-  // Second pass: Recalculate portfolio percentages based on current values
+  // Second pass: Recalculating portfolio percentages based on current values (by Google finance API)
   const totalCurrentValue = updatedStocks.reduce((sum, stock) => sum + stock.presentValue, 0);
   
   const stocksWithUpdatedPercentages = updatedStocks.map((stock) => ({
@@ -108,11 +110,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       let dataSource: string;
 
       if (USE_REAL_API) {
+        // Fixed: Now properly passing bypassCache parameter
         priceUpdates = await fetchRealMarketData(bypassCache);
 
         if (priceUpdates.length === 0) {
           dataSource = "simulated-fallback";
         } else if (priceUpdates.length < mockStocks.length) {
+          // This is where "mixed" data source comes from - some API calls failed
           dataSource = "yahoo-finance-mixed";
         } else {
           const realPECount = priceUpdates.filter(
@@ -150,7 +154,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           stocksProcessed: updatedStocks.length,
           environment: NODE_ENV,
           useRealApi: USE_REAL_API,
-          cacheBypass: bypassCache, 
+          cacheBypass: bypassCache,
+          // Added debug info
+          totalStocks: mockStocks.length,
+          successfulFetches: priceUpdates.length,
+          failedFetches: mockStocks.length - priceUpdates.length,
         },
       });
     } else if (req.method === "POST") {
